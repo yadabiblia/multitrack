@@ -163,7 +163,6 @@
         window.addEventListener('resize', () => drawTimeline(maxDuration));
         drawTimeline(60);
 
-        // Sincronizar scroll horizontal limpio
         tracksScrollContainer.addEventListener('scroll', () => {
             timelineContainer.scrollLeft = tracksScrollContainer.scrollLeft;
         });
@@ -241,17 +240,6 @@
 
                 if (!masterTrack) {
                     masterTrack = wavesurfer;
-                    // Usamos requestAnimationFrame optimizado para evitar saturación y parpadeos
-                    masterTrack.on('audiodprocess', updatePlayhead);
-                    masterTrack.on('seeking', updatePlayhead);
-                }
-            });
-
-            // Actualización fluida mediante animationFrame nativo al reproducir
-            wavesurfer.on('play', () => {
-                if (!masterTrack || masterTrack === wavesurfer) {
-                    masterTrack = wavesurfer;
-                    startPlayheadLoop();
                 }
             });
 
