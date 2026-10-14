@@ -16,7 +16,7 @@
         .timeline-spacer { width: 280px; border-right: 1px solid #2d2d35; flex-shrink: 0; background: #202028; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-family: monospace; font-size: 1.1em; color: #00b37e; position: sticky; left: 0; z-index: 25; }
         .timeline-canvas-container { flex-grow: 1; height: 35px; position: relative; overflow: hidden; background: #16161a; }
         
-        #timelineCanvas { width: 100%; height: 100%; display: block; cursor: pointer; }
+        #timelineCanvas { height: 100%; display: block; cursor: pointer; }
 
         /* Cursor de reproducción */
         #playhead {
@@ -42,7 +42,7 @@
         }
 
         .tracks-scroll-container { overflow-x: auto; position: relative; }
-        .tracks-wrapper { display: flex; flex-direction: column; position: relative; }
+        .tracks-wrapper { display: flex; flex-direction: column; position: relative; width: max-content; min-width: 100%; }
         
         .track-row { display: flex; height: 75px; border-bottom: 1px solid #2d2d35; align-items: stretch; }
         .track-row:last-child { border-bottom: none; }
@@ -58,7 +58,7 @@
         .track-bottom-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
         .volume-slider { flex-grow: 1; accent-color: #fff; cursor: pointer; height: 4px; }
         
-        .track-waveform-area { flex-grow: 1; position: relative; display: flex; align-items: center; background-color: rgba(0,0,0,0.2); min-width: 800px; }
+        .track-waveform-area { flex-grow: 1; position: relative; display: flex; align-items: center; background-color: rgba(0,0,0,0.2); }
         .waveform { width: 100%; }
 
         button { cursor: pointer; background-color: #323238; color: white; border: none; border-radius: 4px; font-weight: 500; }
@@ -129,18 +129,17 @@
         let wavesurfers = [];
         let trackCount = 0;
         let masterTrack = null;
-        let maxDuration = 60;
+        let maxDuration = 60; // Duración base en segundos
+        const pxPerSec = 80;  // Píxeles fijos por segundo (proporción limpia tipo DAW)
 
         function drawTimeline(duration = 60) {
-            timelineCanvas.width = timelineCanvas.parentElement.clientWidth;
+            const totalWidth = Math.max(timelineContainer.clientWidth, duration * pxPerSec);
+            timelineCanvas.width = totalWidth;
             timelineCanvas.height = 35;
             
             canvasCtx.clearRect(0, 0, timelineCanvas.width, timelineCanvas.height);
             canvasCtx.fillStyle = '#8e8e93';
-            canvasCtx.font = '10px sans-serif';
-
-            const totalWidth = timelineCanvas.width;
-            const pxPerSec = totalWidth / duration;
+            canvasCtx.font = '11px sans-serif';
 
             for (let sec = 0; sec <= duration; sec += 1) {
                 const x = sec * pxPerSec;
@@ -155,7 +154,7 @@
                 canvasCtx.stroke();
 
                 if (isPrimary) {
-                    canvasCtx.fillText(sec.toString(), x + 3, 12);
+                    canvasCtx.fillText(`${sec}`, x + 4, 13);
                 }
             }
         }
@@ -163,6 +162,24 @@
         window.addEventListener('resize', () => drawTimeline(maxDuration));
         drawTimeline(60);
 
+        // Permitir clic en la regla para saltar a un segundo exacto
+        timelineCanvas.addEventListener('click', (e) => {
+            const rect = timelineCanvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left + tracksScrollContainer.scrollLeft;
+            const targetTime = clickX / pxPerSec;
+
+            if (masterTrack && targetTime <= maxDuration) {
+                wavesurfers.forEach(ws => {
+                    const dur = ws.getDuration();
+                    if (dur && targetTime <= dur) {
+                        ws.seekTo(targetTime / dur);
+                    }
+                });
+                updatePlayhead();
+            }
+        });
+
+        // Sincronizar scroll horizontal entre la línea de tiempo y las pistas
         tracksScrollContainer.addEventListener('scroll', () => {
             timelineContainer.scrollLeft = tracksScrollContainer.scrollLeft;
         });
@@ -206,7 +223,8 @@
                 progressColor: '#ffffff',
                 height: 70,
                 barWidth: 2,
-                barGap: 1
+                barGap: 1,
+                minPxPerSec: pxPerSec // Mantiene la misma escala proporcional de la regla
             });
             
             wavesurfers.push(wavesurfer);
@@ -276,29 +294,23 @@
         function updatePlayhead() {
             if (!masterTrack) return;
             const currentTime = masterTrack.getCurrentTime();
-            const duration = masterTrack.getDuration();
             
             const mins = Math.floor(currentTime / 60).toString().padStart(2, '0');
             const secs = Math.floor(currentTime % 60).toString().padStart(2, '0');
             const tenths = Math.floor((currentTime % 1) * 10);
             timeCounter.textContent = `${mins}:${secs}.${tenths}`;
 
-            if (duration > 0) {
-                const waveformArea = document.querySelector('.track-waveform-area');
-                if (waveformArea) {
-                    const totalWidth = waveformArea.clientWidth;
-                    const leftOffset = 280 + (totalWidth * (currentTime / duration)) - tracksScrollContainer.scrollLeft;
-                    playhead.style.left = `${leftOffset}px`;
-                    playhead.style.display = 'block';
-                }
-            }
+            // Posición exacta basada en la escala de píxeles por segundo menos el scroll horizontal
+            const leftOffset = 280 + (currentTime * pxPerSec) - tracksScrollContainer.scrollLeft;
+            playhead.style.left = `${leftOffset}px`;
+            playhead.style.display = 'block';
         }
 
         function checkIfAllReady() {
             if (wavesurfers.length > 0) {
                 masterPlayBtn.disabled = false;
                 masterStopBtn.disabled = false;
-                statusMsg.textContent = "Pistas listas y sincronizadas.";
+                statusMsg.textContent = "Estudio DAW sincronizado.";
             }
         }
 
