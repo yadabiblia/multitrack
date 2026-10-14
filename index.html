@@ -11,10 +11,12 @@
         
         .daw-workspace { background: #16161a; border: 1px solid #2d2d35; border-radius: 8px; overflow: hidden; margin-top: 15px; position: relative; display: flex; flex-direction: column; }
         
-        /* Cabecera con línea de tiempo fija */
+        /* Cabecera y área general con scroll horizontal unificado */
         .timeline-row { display: flex; background: #1f1f26; border-bottom: 1px solid #2d2d35; position: sticky; top: 0; z-index: 20; }
         .timeline-spacer { width: 280px; border-right: 1px solid #2d2d35; flex-shrink: 0; background: #202028; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-family: monospace; font-size: 1.1em; color: #00b37e; position: sticky; left: 0; z-index: 25; }
-        .timeline-canvas-container { flex-grow: 1; height: 35px; position: relative; overflow: hidden; background: #16161a; }
+        
+        .timeline-scroll-container { flex-grow: 1; overflow-x: auto; position: relative; background: #16161a; }
+        .timeline-canvas-container { height: 35px; position: relative; }
         
         #timelineCanvas { height: 100%; display: block; cursor: pointer; }
 
@@ -99,8 +101,10 @@
                 <span id="timeCounter">00:00.0</span>
                 <span style="font-size: 0.8em; color: #666;">⏱️</span>
             </div>
-            <div class="timeline-canvas-container" id="timelineContainer">
-                <canvas id="timelineCanvas"></canvas>
+            <div class="timeline-scroll-container" id="timelineScrollContainer">
+                <div class="timeline-canvas-container">
+                    <canvas id="timelineCanvas"></canvas>
+                </div>
             </div>
         </div>
         <div class="tracks-scroll-container" id="tracksScrollContainer">
@@ -111,6 +115,7 @@
     <script>
         const tracksArea = document.getElementById('tracksArea');
         const tracksScrollContainer = document.getElementById('tracksScrollContainer');
+        const timelineScrollContainer = document.getElementById('timelineScrollContainer');
         const addTrackBtn = document.getElementById('addTrackBtn');
         const masterPlayBtn = document.getElementById('masterPlayBtn');
         const masterStopBtn = document.getElementById('masterStopBtn');
@@ -118,7 +123,6 @@
         const playhead = document.getElementById('playhead');
         const timeCounter = document.getElementById('timeCounter');
         const timelineCanvas = document.getElementById('timelineCanvas');
-        const timelineContainer = document.getElementById('timelineContainer');
         const canvasCtx = timelineCanvas.getContext('2d');
         
         const addSectionBtn = document.getElementById('addSectionBtn');
@@ -129,8 +133,8 @@
         let wavesurfers = [];
         let trackCount = 0;
         let masterTrack = null;
-        let maxDuration = 30; // Duración inicial predeterminada en segundos
-        const pxPerSec = 70;  // 70 píxeles exactos por segundo (escala fija y sincronizada)
+        let maxDuration = 30; // Duración base inicial en segundos
+        const pxPerSec = 80;  // Escala fija de pixeles por segundo
 
         function drawTimeline(duration) {
             timelineCanvas.width = duration * pxPerSec;
@@ -160,10 +164,18 @@
 
         drawTimeline(maxDuration);
 
+        // Sincronizar desplazamiento horizontal bidireccional entre la regla y las pistas
+        tracksScrollContainer.addEventListener('scroll', () => {
+            timelineScrollContainer.scrollLeft = tracksScrollContainer.scrollLeft;
+        });
+        timelineScrollContainer.addEventListener('scroll', () => {
+            tracksScrollContainer.scrollLeft = timelineScrollContainer.scrollLeft;
+        });
+
         // Permitir clic en la regla de tiempo para saltar a un segundo exacto
         timelineCanvas.addEventListener('click', (e) => {
             const rect = timelineCanvas.getBoundingClientRect();
-            const clickX = e.clientX - rect.left + tracksScrollContainer.scrollLeft;
+            const clickX = e.clientX - rect.left + timelineScrollContainer.scrollLeft;
             const targetTime = clickX / pxPerSec;
 
             if (masterTrack && targetTime <= maxDuration) {
@@ -175,11 +187,6 @@
                 });
                 updatePlayhead();
             }
-        });
-
-        // Sincronizar el scroll horizontal entre la línea de tiempo superior y las pistas
-        tracksScrollContainer.addEventListener('scroll', () => {
-            timelineContainer.scrollLeft = tracksScrollContainer.scrollLeft;
         });
 
         addTrackBtn.addEventListener('click', createTrack);
@@ -222,7 +229,7 @@
                 height: 70,
                 barWidth: 2,
                 barGap: 1,
-                minPxPerSec: pxPerSec // Mantiene exactamente los mismos píxeles por segundo que la regla
+                minPxPerSec: pxPerSec
             });
             
             wavesurfers.push(wavesurfer);
@@ -251,7 +258,7 @@
                 const duration = wavesurfer.getDuration();
                 if (duration > maxDuration) {
                     maxDuration = Math.ceil(duration);
-                    drawTimeline(maxDuration); // Redibuja la regla al tamaño exacto de la pista más larga
+                    drawTimeline(maxDuration); // Extiende la regla de tiempo al tamaño real del audio cargado
                 }
 
                 if (!masterTrack) {
@@ -285,7 +292,7 @@
             const tenths = Math.floor((currentTime % 1) * 10);
             timeCounter.textContent = `${mins}:${secs}.${tenths}`;
 
-            // Posición exacta matemática basada en la escala fija menos el scroll horizontal
+            // Posición sincronizada restando el desplazamiento horizontal actual
             const leftOffset = 280 + (currentTime * pxPerSec) - tracksScrollContainer.scrollLeft;
             playhead.style.left = `${leftOffset}px`;
             playhead.style.display = 'block';
@@ -295,7 +302,7 @@
             if (wavesurfers.length > 0) {
                 masterPlayBtn.disabled = false;
                 masterStopBtn.disabled = false;
-                statusMsg.textContent = "Pistas sincronizadas a escala fija.";
+                statusMsg.textContent = "Estudio DAW sincronizado y deslizable.";
             }
         }
 
